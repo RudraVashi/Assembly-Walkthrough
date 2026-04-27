@@ -1,21 +1,21 @@
 CC     = gcc
-SRC    = src/func.c
-TIMER  = src/timer.c
 LEVELS = O0 O1 O2 O3
 
-# ── Default: build everything ────────────────────────────────────────────────
+SOURCES = func loops float_ops
+TIMER   = src/timer.c
+
 all: assembly binaries
 
-# ── Generate assembly at all 4 optimization levels ───────────────────────────
 assembly:
 	@echo "=== Generating assembly files ==="
-	$(CC) -O0 -S -o assembly/O0/func_O0.s $(SRC)
-	$(CC) -O1 -S -o assembly/O1/func_O1.s $(SRC)
-	$(CC) -O2 -S -o assembly/O2/func_O2.s $(SRC)
-	$(CC) -O3 -S -o assembly/O3/func_O3.s $(SRC)
+	@for src in $(SOURCES); do \
+		for level in $(LEVELS); do \
+			echo "  Compiling src/$$src.c at -$$level ..."; \
+			$(CC) -$$level -S -o assembly/$$level/$${src}_$$level.s src/$$src.c; \
+		done; \
+	done
 	@echo "Done. Files written to assembly/O{0-3}/"
 
-# ── Compile timer binaries at all 4 optimization levels ──────────────────────
 binaries:
 	@echo "=== Compiling timer binaries ==="
 	$(CC) -O0 -o performance/timer_O0 $(TIMER)
@@ -24,7 +24,6 @@ binaries:
 	$(CC) -O3 -o performance/timer_O3 $(TIMER)
 	@echo "Done. Binaries written to performance/"
 
-# ── Run all timers and print results side by side ────────────────────────────
 run:
 	@echo "=== Performance Results ==="
 	@echo "--- O0 (no optimization) ---"
@@ -36,22 +35,44 @@ run:
 	@echo "--- O3 ---"
 	@./performance/timer_O3
 
-# ── Count instructions in each assembly file ─────────────────────────────────
 count:
 	@echo "=== Instruction Counts ==="
 	@chmod +x performance/count_instructions.sh
-	@for level in $(LEVELS); do \
-		./performance/count_instructions.sh assembly/$$level/func_$$level.s; \
+	@for src in $(SOURCES); do \
+		echo ""; \
+		echo "--- $$src ---"; \
+		for level in $(LEVELS); do \
+			./performance/count_instructions.sh assembly/$$level/$${src}_$$level.s; \
+		done; \
 	done
 
-# ── Diff two optimization levels (usage: make diff FROM=O0 TO=O2) ────────────
 diff:
-	@diff -u assembly/$(FROM)/func_$(FROM).s assembly/$(TO)/func_$(TO).s || true
+	@diff -u assembly/$(FROM)/$(SRC)_$(FROM).s assembly/$(TO)/$(SRC)_$(TO).s || true
 
-# ── Remove all generated files ───────────────────────────────────────────────
+registers:
+	@echo "=== Register Usage: $(SRC) at -$(LEVEL) ==="
+	@chmod +x performance/register_usage.sh
+	@./performance/register_usage.sh assembly/$(LEVEL)/$(SRC)_$(LEVEL).s
+
+registers-all:
+	@chmod +x performance/register_usage.sh
+	@for src in $(SOURCES); do \
+		echo ""; \
+		echo "=============================="; \
+		echo " $$src"; \
+		echo "=============================="; \
+		for level in $(LEVELS); do \
+			echo ""; \
+			echo "  --- $$level ---"; \
+			./performance/register_usage.sh assembly/$$level/$${src}_$$level.s; \
+		done; \
+	done
+
 clean:
-	rm -f assembly/O0/*.s assembly/O1/*.s assembly/O2/*.s assembly/O3/*.s
+	@for level in $(LEVELS); do \
+		rm -f assembly/$$level/*.s; \
+	done
 	rm -f performance/timer_O0 performance/timer_O1 \
 	      performance/timer_O2 performance/timer_O3
 
-.PHONY: all assembly binaries run count diff clean
+.PHONY: all assembly binaries run count diff registers registers-all clean
